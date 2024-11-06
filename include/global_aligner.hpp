@@ -24,7 +24,7 @@ namespace GlobalAlign{
     }
 
     inline void fill_score_trace(size_t M, size_t N,
-                                 const std::vector<char>& M_seq, const std::vector<char>& N_seq,
+                                 const std::string& M_seq, const std::string& N_seq,
                                  ScoreMatrix& s_matrix, TraceMatrix& t_matrix,
                                  ScoreType gap_score, ScoreType match_score, ScoreType mismatch_score) {
         for (size_t i = 1; i < M + 1; ++i) {
@@ -37,10 +37,10 @@ namespace GlobalAlign{
                 auto left_score = s_matrix(i - 1, j) + gap_score;
                 auto right_score = s_matrix(i, j - 1) + gap_score;
 
-                if (diag_score >= std::max(left_score, right_score)) {
+                if (diag_score > std::max(left_score, right_score)) {
                     s_matrix(i, j) = diag_score;
                     t_matrix(i, j) = 'D';
-                } else if (left_score >= right_score) {
+                } else if (left_score > right_score) {
                     s_matrix(i, j) = left_score;
                     t_matrix(i, j) = 'H';
                 } else {
@@ -52,7 +52,7 @@ namespace GlobalAlign{
     }
 
     inline std::tuple<std::vector<char>, std::vector<char>> backtrace(size_t M, size_t N,
-                                                                      const std::vector<char>& M_seq, const std::vector<char>& N_seq,
+                                                                      const std::string& M_seq, const std::string& N_seq,
                                                                       ScoreMatrix& s_matrix, TraceMatrix& t_matrix) {
         std::vector<char> M_seq_out{};
         std::vector<char> N_seq_out{};
@@ -86,8 +86,8 @@ namespace GlobalAlign{
 
 }
 
-inline std::tuple<std::vector<char>, std::vector<char>> align_global(const std::vector<char>& M_seq,
-                                                                     const std::vector<char>& N_seq,
+inline std::tuple<std::vector<char>, std::vector<char>> align_global(const std::string& M_seq,
+                                                                     const std::string& N_seq,
                                                                      ScoreType gap_score,
                                                                      ScoreType match_score,
                                                                      ScoreType mismatch_score) {

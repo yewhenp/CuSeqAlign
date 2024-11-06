@@ -27,18 +27,25 @@ FetchContent_Declare(argparse
 )
 FetchContent_MakeAvailable(argparse)
 
+function(set_target_and_link TARGET_NAME TARGET_SOURCES)
+    add_executable(${TARGET_NAME} ${TARGET_SOURCES})
 
-set(OUT_ALIGNER_BASE_SOURCES src/main.cpp)
+    target_include_directories(${TARGET_NAME} PRIVATE include)
+    target_include_directories(${TARGET_NAME} PRIVATE ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
 
-add_executable(OutAligner ${OUT_ALIGNER_BASE_SOURCES})
+    target_link_libraries(${TARGET_NAME} Eigen3::Eigen)
+    target_link_libraries(${TARGET_NAME} OpenMP::OpenMP_CXX)
+    target_link_libraries(${TARGET_NAME} nlohmann_json::nlohmann_json)
+    target_link_libraries(${TARGET_NAME} argparse)
+    target_link_libraries(${TARGET_NAME} indicators::indicators)
+    target_link_libraries(${TARGET_NAME} fmt::fmt-header-only)
+    target_link_libraries(${TARGET_NAME} MPI::MPI_CXX)
+endfunction()
 
-target_include_directories(OutAligner PRIVATE include)
-target_include_directories(OutAligner PRIVATE ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
 
-target_link_libraries(OutAligner Eigen3::Eigen)
-target_link_libraries(OutAligner OpenMP::OpenMP_CXX)
-target_link_libraries(OutAligner nlohmann_json::nlohmann_json)
-target_link_libraries(OutAligner argparse)
-target_link_libraries(OutAligner indicators::indicators)
-target_link_libraries(OutAligner fmt::fmt-header-only)
-target_link_libraries(OutAligner MPI::MPI_CXX)
+set(OUT_ALIGNER_BASE_SOURCES src/base_exec.cpp)
+set_target_and_link(OutAligner ${OUT_ALIGNER_BASE_SOURCES})
+
+
+set(OUT_ALIGNER_VALIDATION_SOURCES src/validation.cpp)
+set_target_and_link(OutAlignerValidate ${OUT_ALIGNER_VALIDATION_SOURCES})
