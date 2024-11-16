@@ -6,6 +6,7 @@
 #include <chrono>
 #include <thread>
 #include <random>
+#include <comparator.hpp>
 
 std::string generate_random_string(size_t length) {
     const std::string characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -23,6 +24,8 @@ std::string generate_random_string(size_t length) {
 }
 
 int main() {
+    cudaSetDevice(0);
+
     int rand_len = 100;
 //    std::string M_seq_str = "TCACGCCTGTAATTCCAAAAAAAAAAAAAAAATCACG";
     std::string M_seq_str = generate_random_string(rand_len);
@@ -36,6 +39,8 @@ int main() {
     ScoreType match_score = 2;
     ScoreType mismatch_score = -1;
 
+    Alignments reference_al, cuda_al;
+
     {
         auto begin = std::chrono::steady_clock::now();
         auto aligner = GlobalAligner{gap_score, match_score, mismatch_score};
@@ -46,6 +51,8 @@ int main() {
         for (const auto &alignment: alignments) {
             FastaSeq::print_alignment(alignment);
         }
+
+        reference_al = alignments;
     }
 
     {
@@ -58,7 +65,11 @@ int main() {
         for (const auto &alignment: alignments) {
             FastaSeq::print_alignment(alignment);
         }
+
+        cuda_al = alignments;
     }
+
+    std::cout << "Accuracy = " << compare_alignment_accuracy(reference_al, cuda_al) << std::endl;
 //
 //    {
 //        auto begin = std::chrono::steady_clock::now();

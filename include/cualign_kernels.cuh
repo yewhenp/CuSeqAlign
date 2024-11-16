@@ -57,3 +57,77 @@ __global__ void base_align_kern(size_t M, size_t N,
 
 }
 
+
+template<int NThreads, typename SType, typename TType>
+__global__ void init_trace_matrices_kern(size_t M, size_t N,
+                                    SType * __restrict__ s_matrix_ptr, TType * __restrict__ t_matrix_ptr,
+                                    SType gap_score) {
+
+    auto coord_thrd = blockIdx.x * NThreads + threadIdx.x;
+
+    auto s_matrix = make_tensor(make_gmem_ptr(s_matrix_ptr), make_layout(make_shape(M + 1, N + 1), make_shape(1, M + 1)));
+    auto t_matrix = make_tensor(make_gmem_ptr(t_matrix_ptr), make_layout(make_shape(M + 1, N + 1), make_shape(1, M + 1)));
+
+    if (coord_thrd <= M) {
+        s_matrix(coord_thrd, 0) = gap_score * coord_thrd;
+        t_matrix(coord_thrd, 0) = 'H';
+    }
+
+    if (coord_thrd <= N) {
+        s_matrix(0, coord_thrd) = gap_score * coord_thrd;
+        t_matrix(0, coord_thrd) = 'V';
+    }
+}
+
+template<typename SeqType, typename SType, typename TType>
+__global__ void traceback_kern(size_t M, size_t N,
+                               const SeqType* __restrict__ const M_seq, const SeqType* __restrict__ const N_seq,
+                               SType * __restrict__ s_matrix_ptr, TType * __restrict__ t_matrix_ptr,
+                               SeqType* __restrict__ M_seq_out, SeqType* __restrict__ N_seq_out) {
+
+    if (thread0()) {
+        size_t out_index = 0;
+        size_t i = M;
+        size_t j = N;
+
+        auto s_matrix = make_tensor(make_gmem_ptr(s_matrix_ptr), make_layout(make_shape(M + 1, N + 1), make_shape(1, M + 1)));
+        auto t_matrix = make_tensor(make_gmem_ptr(t_matrix_ptr), make_layout(make_shape(M + 1, N + 1), make_shape(1, M + 1)));
+
+        while (i > 0 || j > 0) {
+            auto trace = t_matrix(i, j);
+            if (trace == 'D') {
+                M_seq_out[out_index] = M_seq[i - 1];
+                N_seq_out[out_index] = N_seq[j - 1];
+                i--;
+                j--;
+            } else if (trace == 'H') {
+                M_seq_out[out_index] = M_seq[i - 1];
+                N_seq_out[out_index] = '-';
+                i--;
+            } else if (trace == 'V') {
+                M_seq_out[out_index] = '-';
+                N_seq_out[out_index] = N_seq[j - 1];
+                j--;
+            }
+
+            out_index++;
+        }
+
+        M_seq_out[out_index] = '\0';
+        N_seq_out[out_index] = '\0';
+
+//        out_index++;
+
+        for (size_t q = 0; q < (out_index - (out_index % 2)) / 2; q++) {
+            auto tmp_M = M_seq_out[q];
+            M_seq_out[q] = M_seq_out[out_index - q - 1];
+            M_seq_out[out_index - q - 1] = tmp_M;
+
+            auto tmp_N = N_seq_out[q];
+            N_seq_out[q] = N_seq_out[out_index - q - 1];
+            N_seq_out[out_index - q - 1] = tmp_N;
+        }
+    }
+
+}
+

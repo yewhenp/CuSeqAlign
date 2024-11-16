@@ -47,8 +47,12 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-//    auto aligner = GlobalAligner{program.get<int>("gap_score"), program.get<int>("match_score"), program.get<int>("mismatch_score")};
-    auto aligner = CuAligner{program.get<int>("gap_score"), program.get<int>("match_score"), program.get<int>("mismatch_score")};
+    auto aligner_ref = GlobalAligner{static_cast<ScoreType>(program.get<int>("gap_score")),
+                                     static_cast<ScoreType>(program.get<int>("match_score")),
+                                     static_cast<ScoreType>(program.get<int>("mismatch_score"))};
+    auto aligner = CuAligner{static_cast<ScoreType>(program.get<int>("gap_score")),
+                             static_cast<ScoreType>(program.get<int>("match_score")),
+                             static_cast<ScoreType>(program.get<int>("mismatch_score"))};
 
     auto begin_read = std::chrono::steady_clock::now();
     auto targets = FastaSeq::read_fasta_seqs(program.get<std::string>("target"));
@@ -57,12 +61,28 @@ int main(int argc, char *argv[]) {
     auto end_read = std::chrono::steady_clock::now();
 
     auto begin = std::chrono::steady_clock::now();
+    auto alignments_ref = aligner_ref.align(targets, queries);
     auto alignments = aligner.align(targets, queries);
     auto end = std::chrono::steady_clock::now();
 
+    auto n_scale = 5;
+
+    auto begin_n_ref = std::chrono::steady_clock::now();
+    for (int n = 0; n < n_scale; n++) {
+        auto al_tmp = aligner_ref.align(targets, queries);
+    }
+    auto end_n_ref = std::chrono::steady_clock::now();
+
+    auto begin_n = std::chrono::steady_clock::now();
+    for (int n = 0; n < n_scale; n++) {
+        auto al_tmp = aligner.align(targets, queries);
+    }
+    auto end_n = std::chrono::steady_clock::now();
+
     std::cout << "(time spent read = " << std::chrono::duration_cast<std::chrono::microseconds>(end_read - begin_read).count() / 1000000.0 << " [seconds]) " <<
-                 "(time spent align = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() / 1000000.0 << " [seconds]) " <<
-                 " total accuracy = " <<compare_alignment_accuracy(reference, alignments) << std::endl << std::endl;
+                 "(time spent align (n scaled) = " << std::chrono::duration_cast<std::chrono::microseconds>(end_n - begin_n).count() / n_scale / 1000000.0 << " [seconds]) " <<
+                 "(time spent align reference (n scaled) = " << std::chrono::duration_cast<std::chrono::microseconds>(end_n_ref - begin_n_ref).count() / n_scale / 1000000.0 << " [seconds]) " <<
+                 " total accuracy = " << compare_alignment_accuracy(reference, alignments) << std::endl << std::endl;
 
     return 0;
 }

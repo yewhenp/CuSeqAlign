@@ -76,8 +76,12 @@ namespace GlobalAlign{
                 N_seq_out.push_back(N_seq.at(j - 1));
                 j--;
             } else {
-                std::cerr << "BAAAD" << std::endl;
-                return {};
+//                std::cerr << "BAAAD" << std::endl;
+//                return {};
+                M_seq_out.push_back(M_seq.at(i - 1));
+                N_seq_out.push_back(N_seq.at(j - 1));
+                i--;
+                j--;
             }
         }
 
