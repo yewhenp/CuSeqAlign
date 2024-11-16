@@ -2,6 +2,7 @@
 
 #include <aligner.hpp>
 #include <fasta_io.hpp>
+#include <cualigner.hpp>
 #include <chrono>
 #include <thread>
 #include <random>
@@ -22,10 +23,10 @@ std::string generate_random_string(size_t length) {
 }
 
 int main() {
-    std::string M_seq_str = "TCACGCCTGTAATTCC";
+    std::string M_seq_str = "TCACGCCTGTAATTCCAAAAAAAAAAAAAAAATCACG";
     FastaSeqs targets = {{M_seq_str}};
 
-    std::string N_seq_str = "TTAATTTGTTG";
+    std::string N_seq_str = "TTAATTTGTTGAAAAAAAAAAAAAAAAAAAAATTAAA";
     FastaSeqs queries = {{N_seq_str}};
 
     ScoreType gap_score = -1;
@@ -38,7 +39,7 @@ int main() {
         auto alignments = aligner.align(targets, queries);
         auto end = std::chrono::steady_clock::now();
 
-        std::cout << "Global alignment " << "(time spent = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() / 1000000.0 << " [seconds]):" << std::endl;
+        std::cout << "Host Global alignment " << "(time spent = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() / 1000000.0 << " [seconds]):" << std::endl;
         for (const auto &alignment: alignments) {
             FastaSeq::print_alignment(alignment);
         }
@@ -46,15 +47,27 @@ int main() {
 
     {
         auto begin = std::chrono::steady_clock::now();
-        auto aligner = LocalAligner{gap_score, match_score, mismatch_score};
+        auto aligner = CuAligner{gap_score, match_score, mismatch_score};
         auto alignments = aligner.align(targets, queries);
         auto end = std::chrono::steady_clock::now();
 
-        std::cout << "Local alignment " << "(time spent = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() / 1000000.0 << " [seconds]):" << std::endl;
+        std::cout << "GPU Global alignment " << "(time spent = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() / 1000000.0 << " [seconds]):" << std::endl;
         for (const auto &alignment: alignments) {
             FastaSeq::print_alignment(alignment);
         }
     }
+//
+//    {
+//        auto begin = std::chrono::steady_clock::now();
+//        auto aligner = LocalAligner{gap_score, match_score, mismatch_score};
+//        auto alignments = aligner.align(targets, queries);
+//        auto end = std::chrono::steady_clock::now();
+//
+//        std::cout << "Local alignment " << "(time spent = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() / 1000000.0 << " [seconds]):" << std::endl;
+//        for (const auto &alignment: alignments) {
+//            FastaSeq::print_alignment(alignment);
+//        }
+//    }
 
     return 0;
 }

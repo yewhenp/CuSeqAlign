@@ -3,6 +3,7 @@
 #include <aligner.hpp>
 #include <fasta_io.hpp>
 #include <comparator.hpp>
+#include <cualigner.hpp>
 #include <chrono>
 #include <thread>
 
@@ -46,7 +47,8 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    auto aligner = GlobalAligner{program.get<int>("gap_score"), program.get<int>("match_score"), program.get<int>("mismatch_score")};
+//    auto aligner = GlobalAligner{program.get<int>("gap_score"), program.get<int>("match_score"), program.get<int>("mismatch_score")};
+    auto aligner = CuAligner{program.get<int>("gap_score"), program.get<int>("match_score"), program.get<int>("mismatch_score")};
 
     auto begin_read = std::chrono::steady_clock::now();
     auto targets = FastaSeq::read_fasta_seqs(program.get<std::string>("target"));

@@ -7,6 +7,8 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
 
+set(CMAKE_CUDA_ARCHITECTURES 80)
+
 find_package (OpenMP REQUIRED)
 find_package (Eigen3 3.3 REQUIRED NO_MODULE)
 find_package (indicators REQUIRED)
@@ -31,6 +33,7 @@ function(set_target_and_link TARGET_NAME TARGET_SOURCES)
     add_executable(${TARGET_NAME} ${TARGET_SOURCES})
 
     target_include_directories(${TARGET_NAME} PRIVATE include)
+    include_directories(/home/yevhen/Documents/cutlass/include)
     target_include_directories(${TARGET_NAME} PRIVATE ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
 
     target_link_libraries(${TARGET_NAME} Eigen3::Eigen)
@@ -40,12 +43,17 @@ function(set_target_and_link TARGET_NAME TARGET_SOURCES)
     target_link_libraries(${TARGET_NAME} indicators::indicators)
     target_link_libraries(${TARGET_NAME} fmt::fmt-header-only)
     target_link_libraries(${TARGET_NAME} MPI::MPI_CXX)
+
+    target_compile_options(${TARGET_NAME} PRIVATE
+            $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-Wall>
+            $<$<COMPILE_LANGUAGE:CUDA>:-DCUTLASS_NVCC_ARCHS=80>
+    )
 endfunction()
 
 
-set(OUT_ALIGNER_BASE_SOURCES src/base_exec.cpp)
+set(OUT_ALIGNER_BASE_SOURCES src/base_exec.cu)
 set_target_and_link(OutAligner ${OUT_ALIGNER_BASE_SOURCES})
 
 
-set(OUT_ALIGNER_VALIDATION_SOURCES src/validation.cpp)
+set(OUT_ALIGNER_VALIDATION_SOURCES src/validation.cu)
 set_target_and_link(OutAlignerValidate ${OUT_ALIGNER_VALIDATION_SOURCES})
