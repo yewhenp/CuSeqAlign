@@ -12,23 +12,23 @@ __global__ void base_align_kern(size_t M, size_t N,
 
     auto x_pos_thrd = static_cast<int>(threadIdx.x);
     auto y_pos_thrd = -static_cast<int>(threadIdx.x);
-//    auto s_matrix = make_tensor(make_gmem_ptr(s_matrix_ptr), make_shape(M + 1, N + 1));
-//    auto t_matrix = make_tensor(make_gmem_ptr(t_matrix_ptr), make_shape(M + 1, N + 1));
 
-#define s_matrix(xpos, ypos) (s_matrix_ptr[(ypos) * (M+1) + xpos])
-#define t_matrix(xpos, ypos) (t_matrix_ptr[(ypos) * (M+1) + xpos])
+    auto x_pos = blockIdx.x * NThreads + x_pos_thrd;
+
+    if (x_pos >= M) return;
+
+    auto s_matrix = make_tensor(make_gmem_ptr(s_matrix_ptr), make_layout(make_shape(M + 1, N + 1), make_shape(1, M + 1)));
+    auto t_matrix = make_tensor(make_gmem_ptr(t_matrix_ptr), make_layout(make_shape(M + 1, N + 1), make_shape(1, M + 1)));
 
 #pragma unroll
     for (int q = 0; q < 2 * NThreads; q++) {
         __syncthreads();
 
         if (0 <= y_pos_thrd && y_pos_thrd < NThreads) {
-
-            auto x_pos = blockIdx.x * NThreads + x_pos_thrd;
             auto y_pos = step * NThreads - blockIdx.x * NThreads + y_pos_thrd;
 
-            if ((x_pos >= M) || (y_pos >= N)) {
-                continue;
+            if (y_pos >= N) {
+                return;
             }
 
             auto compare_score = match_score;

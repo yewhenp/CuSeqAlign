@@ -152,7 +152,7 @@ public:
                 cudaMemcpyAsync(M_seq_d, M_seq.data(), (M + 1) * sizeof(char), cudaMemcpyHostToDevice, stream);
                 cudaMemcpyAsync(N_seq_d, N_seq.data(), (N + 1) * sizeof(char), cudaMemcpyHostToDevice, stream);
 
-                constexpr int blocksize = 32;  // TODO: tune
+                constexpr int blocksize = 128;  // TODO: tune
                 const int nblocks = std::ceil(static_cast<float>(std::max(M + 1, N + 1)) / static_cast<float>(blocksize));
                 for (int j = 0; j < 2 * nblocks + 1; j++) {
                     base_align_kern<blocksize><<<1 + j, blocksize, 0, stream>>>(M, N, M_seq_d, N_seq_d,

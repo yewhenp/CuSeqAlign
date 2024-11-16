@@ -23,10 +23,13 @@ std::string generate_random_string(size_t length) {
 }
 
 int main() {
-    std::string M_seq_str = "TCACGCCTGTAATTCCAAAAAAAAAAAAAAAATCACG";
+    int rand_len = 100;
+//    std::string M_seq_str = "TCACGCCTGTAATTCCAAAAAAAAAAAAAAAATCACG";
+    std::string M_seq_str = generate_random_string(rand_len);
     FastaSeqs targets = {{M_seq_str}};
 
-    std::string N_seq_str = "TTAATTTGTTGAAAAAAAAAAAAAAAAAAAAATTAAA";
+//    std::string N_seq_str = "TTAATTTGTTGAAAAAAAAAAAAAAAAAAAAATTAAA";
+    std::string N_seq_str = generate_random_string(rand_len);
     FastaSeqs queries = {{N_seq_str}};
 
     ScoreType gap_score = -1;
