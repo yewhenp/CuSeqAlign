@@ -1,6 +1,10 @@
 #pragma once
 
 #include <vector>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <queue>
 #include <tuple>
 #include <fasta_io.hpp>
 #include <global_aligner.hpp>
@@ -8,6 +12,98 @@
 #include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
 #include <cualign_kernels.cuh>
+
+class CudaThreadPooledAligner {
+public:
+    CudaThreadPooledAligner(size_t numThreads_, size_t maxM, size_t maxN) : numThreads(numThreads_) {
+        streams.resize(numThreads);
+
+        for (int i = 0; i < numThreads; i++) {
+            ScoreType* s_matrix_d;
+            char* t_matrix_d;
+            char* M_seq_d;
+            char* N_seq_d;
+
+            cudaMalloc(&s_matrix_d, (maxM + 1) * (maxN + 1) * sizeof(ScoreType));
+            cudaMalloc(&t_matrix_d, (maxM + 1) * (maxN + 1) * sizeof(char));
+            cudaMalloc(&M_seq_d, (maxM + 1) * sizeof(char));
+            cudaMalloc(&N_seq_d, (maxN + 1) * sizeof(char));
+
+            s_matrix_d_s.push_back(s_matrix_d);
+            t_matrix_d_s.push_back(t_matrix_d);
+            M_seq_d_s.push_back(M_seq_d);
+            N_seq_d_s.push_back(N_seq_d);
+        }
+
+        for (size_t i = 0; i < numThreads; ++i) {
+            cudaStreamCreate(&streams[i]);
+            workers.emplace_back([this, i]() {
+                cudaStream_t stream = streams[i];
+                ScoreType* s_matrix_d = s_matrix_d_s[i];
+                char* t_matrix_d = t_matrix_d_s[i];
+                char* M_seq_d = M_seq_d_s[i];
+                char* N_seq_d = N_seq_d_s[i];
+                while (true) {
+                    std::function<void(cudaStream_t, ScoreType*, char*, char*, char*)> task;
+                    {
+                        std::unique_lock<std::mutex> lock(queueMutex);
+                        condition.wait(lock, [this] { return stop || !tasks.empty(); });
+
+                        if (stop && tasks.empty())
+                            return;
+
+                        task = std::move(tasks.front());
+                        tasks.pop();
+                    }
+                    task(stream, s_matrix_d, t_matrix_d, M_seq_d, N_seq_d);
+                    cudaStreamSynchronize(stream);
+                }
+            });
+        }
+    }
+
+    ~CudaThreadPooledAligner() {
+        {
+            std::unique_lock<std::mutex> lock(queueMutex);
+            stop = true;
+        }
+        condition.notify_all();
+        for (auto &worker : workers) {
+            worker.join();
+        }
+        for (auto &stream : streams) {
+            cudaStreamDestroy(stream);
+        }
+
+        for (int i = 0; i < numThreads; i++) {
+            cudaFree(s_matrix_d_s[i]);
+            cudaFree(t_matrix_d_s[i]);
+            cudaFree(M_seq_d_s[i]);
+            cudaFree(N_seq_d_s[i]);
+        }
+    }
+
+    void enqueue(std::function<void(cudaStream_t, ScoreType*, char*, char*, char*)> task) {
+        {
+            std::unique_lock<std::mutex> lock(queueMutex);
+            tasks.emplace(std::move(task));
+        }
+        condition.notify_one();
+    }
+
+    std::vector<std::thread> workers;
+    std::vector<cudaStream_t> streams;
+    std::queue<std::function<void(cudaStream_t, ScoreType*, char*, char*, char*)>> tasks;
+    std::mutex queueMutex;
+    std::condition_variable condition;
+    bool stop = false;
+    size_t numThreads;
+
+    std::vector<ScoreType*> s_matrix_d_s;
+    std::vector<char*> t_matrix_d_s;
+    std::vector<char*> M_seq_d_s;
+    std::vector<char*> N_seq_d_s;
+};
 
 class CuAligner {
 public:
@@ -20,54 +116,66 @@ public:
     inline Alignments align(const FastaSeqs& targets, const FastaSeqs& queries) {
         Alignments algns{};
 
+        constexpr int n_workers = 8;  // TODO: tune
+
         if (targets.size() != queries.size()) {
             std::cerr << "Error: Mismatch in targets-queries size" << std::endl;
             return algns;
         }
 
+        size_t maxM = 0;
+        size_t maxN = 0;
+
         for (int i = 0; i < targets.size(); ++i) {
-            const auto& M_seq = targets.at(i)._seq;
-            const auto& M_seq_id = targets.at(i)._id;
-            const auto& N_seq = queries.at(i)._seq;
-            const auto& N_seq_id = queries.at(i)._id;
-            
-            const auto M = M_seq.size();
-            const auto N = N_seq.size();
+            if (maxM < targets.at(i)._seq.size()) maxM = targets.at(i)._seq.size();
+            if (maxN < queries.at(i)._seq.size()) maxN = queries.at(i)._seq.size();
+        }
 
-            thrust::host_vector<char> M_seq_h(M_seq.data(), M_seq.data() + M);
-            thrust::device_vector<char> M_seq_d = M_seq_h;
-            thrust::host_vector<char> N_seq_h(N_seq.data(), N_seq.data() + N);
-            thrust::device_vector<char> N_seq_d = N_seq_h;
+        CudaThreadPooledAligner pool {n_workers, maxM, maxN};
+        algns.resize(targets.size());
 
-            auto [s_matrix_h, t_matrix_h] = GlobalAlign::initialize_score_trace(M, N, _gap_score);
+        for (int i = 0; i < targets.size(); ++i) {
 
-            ScoreType* s_matrix_d;
-            char* t_matrix_d;
-            cudaMalloc(&s_matrix_d, (M + 1) * (N + 1) * sizeof(ScoreType));
-            cudaMalloc(&t_matrix_d, (M + 1) * (N + 1) * sizeof(char));
-            cudaMemcpy(s_matrix_d, s_matrix_h.data(), (M + 1) * (N + 1) * sizeof(ScoreType), cudaMemcpyHostToDevice);
-            cudaMemcpy(t_matrix_d, t_matrix_h.data(), (M + 1) * (N + 1) * sizeof(char), cudaMemcpyHostToDevice);
+            pool.enqueue([i, &targets, &queries, &algns, this](cudaStream_t stream, ScoreType* s_matrix_d, char* t_matrix_d, char* M_seq_d, char* N_seq_d) {
+                const auto& M_seq = targets.at(i)._seq;
+                const auto& M_seq_id = targets.at(i)._id;
+                const auto& N_seq = queries.at(i)._seq;
+                const auto& N_seq_id = queries.at(i)._id;
 
-            constexpr int blocksize = 32;
-            const int nblocks = std::ceil(static_cast<float>(std::max(M + 1, N + 1)) / static_cast<float>(blocksize));
-            for (int j = 0; j < 2 * nblocks + 1; j++) {
-                base_align_kern<blocksize><<<1 + j, blocksize>>>(M, N, M_seq_d.data().get(), N_seq_d.data().get(),
-                                                             s_matrix_d, t_matrix_d,
-                                                             _gap_score, _match_score, _mismatch_score, j);
-            }
+                const auto M = M_seq.size();
+                const auto N = N_seq.size();
 
-            cudaDeviceSynchronize();
-            cudaMemcpy(s_matrix_h.data(), s_matrix_d, (M + 1) * (N + 1) * sizeof(ScoreType), cudaMemcpyDeviceToHost);
-            cudaMemcpy(t_matrix_h.data(), t_matrix_d, (M + 1) * (N + 1) * sizeof(char), cudaMemcpyDeviceToHost);
+                auto [s_matrix_h, t_matrix_h] = GlobalAlign::initialize_score_trace(M, N, _gap_score);
 
-            auto [M_seq_out, N_seq_out] = GlobalAlign::backtrace(M, N, M_seq, N_seq, s_matrix_h, t_matrix_h);
+                cudaMemcpyAsync(s_matrix_d, s_matrix_h.data(), (M + 1) * (N + 1) * sizeof(ScoreType), cudaMemcpyHostToDevice, stream);
+                cudaMemcpyAsync(t_matrix_d, t_matrix_h.data(), (M + 1) * (N + 1) * sizeof(char), cudaMemcpyHostToDevice, stream);
+                cudaMemcpyAsync(M_seq_d, M_seq.data(), (M + 1) * sizeof(char), cudaMemcpyHostToDevice, stream);
+                cudaMemcpyAsync(N_seq_d, N_seq.data(), (N + 1) * sizeof(char), cudaMemcpyHostToDevice, stream);
 
-            const std::string M_seq_out_str = {std::make_move_iterator(M_seq_out.begin()), std::make_move_iterator(M_seq_out.end())};
-            const std::string N_seq_out_str = {std::make_move_iterator(N_seq_out.begin()), std::make_move_iterator(N_seq_out.end())};
+                constexpr int blocksize = 32;  // TODO: tune
+                const int nblocks = std::ceil(static_cast<float>(std::max(M + 1, N + 1)) / static_cast<float>(blocksize));
+                for (int j = 0; j < 2 * nblocks + 1; j++) {
+                    base_align_kern<blocksize><<<1 + j, blocksize, 0, stream>>>(M, N, M_seq_d, N_seq_d,
+                                                                     s_matrix_d, t_matrix_d,
+                                                                     _gap_score, _match_score, _mismatch_score, j);
+                }
 
-            FastaSeq target_res{M_seq_id, M_seq_out_str};
-            FastaSeq query_res{N_seq_id, N_seq_out_str};
-            algns.emplace_back(std::move(target_res), std::move(query_res));
+                cudaMemcpyAsync(s_matrix_h.data(), s_matrix_d, (M + 1) * (N + 1) * sizeof(ScoreType), cudaMemcpyDeviceToHost, stream);
+                cudaMemcpyAsync(t_matrix_h.data(), t_matrix_d, (M + 1) * (N + 1) * sizeof(char), cudaMemcpyDeviceToHost, stream);
+
+                cudaStreamSynchronize(stream);
+
+                auto [M_seq_out, N_seq_out] = GlobalAlign::backtrace(M, N, M_seq, N_seq, s_matrix_h, t_matrix_h);
+
+                const std::string M_seq_out_str = {std::make_move_iterator(M_seq_out.begin()), std::make_move_iterator(M_seq_out.end())};
+                const std::string N_seq_out_str = {std::make_move_iterator(N_seq_out.begin()), std::make_move_iterator(N_seq_out.end())};
+
+                FastaSeq target_res{M_seq_id, M_seq_out_str};
+                FastaSeq query_res{N_seq_id, N_seq_out_str};
+                algns[i] = Alignment{std::move(target_res), std::move(query_res)};
+
+            });
+
         }
 
         return algns;

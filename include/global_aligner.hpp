@@ -77,7 +77,7 @@ namespace GlobalAlign{
                 j--;
             } else {
                 std::cerr << "BAAAD" << std::endl;
-                exit(-1);
+                return {};
             }
         }
 
