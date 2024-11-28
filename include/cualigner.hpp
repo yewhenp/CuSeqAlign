@@ -158,7 +158,7 @@ public:
                 const auto M = M_seq.size();
                 const auto N = N_seq.size();
 
-                constexpr int blocksize = 128;  // TODO: tune
+                constexpr int blocksize = 32;  // TODO: tune
                 const int nblocks = std::ceil(static_cast<float>(std::max(M + 1, N + 1)) / static_cast<float>(blocksize));
 
                 init_trace_matrices_kern<blocksize><<<nblocks, blocksize, 0, stream>>>(M, N, s_matrix_d, t_matrix_d, _gap_score);
