@@ -5,7 +5,7 @@
 using namespace cute;
 
 template<int NThreads, typename SeqType, typename SType, typename TType>
-__global__ void base_align_kern(size_t M, size_t N,
+__global__ __launch_bounds__(NThreads) void base_align_kern(size_t M, size_t N,
                                 const SeqType* __restrict__ const M_seq, const SeqType* __restrict__ const N_seq,
                                 SType * __restrict__ s_matrix_ptr, TType * __restrict__ t_matrix_ptr,
                                 SType gap_score, SType match_score, SType mismatch_score, size_t step) {
@@ -41,6 +41,8 @@ __global__ void base_align_kern(size_t M, size_t N,
 
     if (x_pos >= M) return;
 
+    auto M_seq_val = M_seq[x_pos];
+
 #pragma unroll
     for (int q = 0; q < 2 * NThreads; q++) {
         __syncthreads();
@@ -53,7 +55,7 @@ __global__ void base_align_kern(size_t M, size_t N,
             }
 
             auto compare_score = match_score;
-            if (M_seq[x_pos] != N_seq[y_pos]) {
+            if (M_seq_val != N_seq[y_pos]) {
                 compare_score = mismatch_score;
             }
 
@@ -104,7 +106,7 @@ __global__ void init_trace_matrices_kern(size_t M, size_t N,
 }
 
 template<typename SeqType, typename SType, typename TType>
-__global__ void traceback_kern(size_t M, size_t N,
+__global__ __launch_bounds__(1) void traceback_kern(size_t M, size_t N,
                                const SeqType* __restrict__ const M_seq, const SeqType* __restrict__ const N_seq,
                                SType * __restrict__ s_matrix_ptr, TType * __restrict__ t_matrix_ptr,
                                SeqType* __restrict__ M_seq_out, SeqType* __restrict__ N_seq_out) {

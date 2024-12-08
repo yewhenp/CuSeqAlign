@@ -26,7 +26,7 @@ std::string generate_random_string(size_t length) {
 int main() {
     cudaSetDevice(0);
 
-    int rand_len = 500;
+    int rand_len = 15000;
 //    std::string M_seq_str = "TCACGCCTGTAATTCCAAAAAAAAAAAAAAAATCACG";
     std::string M_seq_str = generate_random_string(rand_len);
     FastaSeqs targets = {{M_seq_str}};
@@ -58,7 +58,7 @@ int main() {
     {
         auto begin = std::chrono::steady_clock::now();
         auto aligner = CuAligner{gap_score, match_score, mismatch_score};
-        auto alignments = aligner.align(targets, queries);
+        auto alignments = aligner.align(targets, queries, false);
         auto end = std::chrono::steady_clock::now();
 
         std::cout << "GPU Global alignment " << "(time spent = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() / 1000000.0 << " [seconds]):" << std::endl;

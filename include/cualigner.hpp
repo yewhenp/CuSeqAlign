@@ -125,10 +125,10 @@ public:
 
     CuAligner(ScoreType gap_score, ScoreType match_score, ScoreType mismatch_score) : _gap_score{gap_score}, _match_score{match_score}, _mismatch_score{mismatch_score} {}
 
-    inline Alignments align(const FastaSeqs& targets, const FastaSeqs& queries) {
+    inline Alignments align(const FastaSeqs& targets, const FastaSeqs& queries, bool skip_traceback) {
         Alignments algns{};
 
-        constexpr int n_workers = 8;  // TODO: tune
+        constexpr int n_workers = 1;  // TODO: tune
 
         if (targets.size() != queries.size()) {
             std::cerr << "Error: Mismatch in targets-queries size" << std::endl;
@@ -148,7 +148,7 @@ public:
 
         for (int i = 0; i < targets.size(); ++i) {
 
-            pool.enqueue([i, &targets, &queries, &algns, this](cudaStream_t stream, ScoreType* s_matrix_d, char* t_matrix_d,
+            pool.enqueue([i, &targets, &queries, &algns, this, &skip_traceback](cudaStream_t stream, ScoreType* s_matrix_d, char* t_matrix_d,
                                                                char* M_seq_d, char* N_seq_d, char* M_seq_d_out, char* N_seq_d_out) {
                 const auto& M_seq = targets.at(i)._seq;
                 const auto& M_seq_id = targets.at(i)._id;
@@ -173,9 +173,11 @@ public:
                                                                      _gap_score, _match_score, _mismatch_score, j);
                 }
 
-                traceback_kern<<<1,1,0,stream>>>(M, N, M_seq_d, N_seq_d,
-                                                 s_matrix_d, t_matrix_d,
-                                                 M_seq_d_out, N_seq_d_out);
+                if (!skip_traceback) {
+                    traceback_kern<<<1, 1, 0, stream>>>(M, N, M_seq_d, N_seq_d,
+                                                        s_matrix_d, t_matrix_d,
+                                                        M_seq_d_out, N_seq_d_out);
+                }
 
                 std::vector<char> M_seq_out, N_seq_out;
                 M_seq_out.resize(M + 1 + N + 1);

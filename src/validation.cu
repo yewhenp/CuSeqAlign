@@ -37,6 +37,10 @@ int main(int argc, char *argv[]) {
             .default_value(std::string(""))
             .required()
             .help("Reference file .fasta");
+    program.add_argument("-sktr", "--skip_traceback")
+            .help("do traceback")
+            .default_value(false)
+            .implicit_value(true);
 
     try {
         program.parse_args(argc, argv);
@@ -60,14 +64,14 @@ int main(int argc, char *argv[]) {
     auto reference = FastaSeq::read_alignments(program.get<std::string>("reference"));
     auto end_read = std::chrono::steady_clock::now();
 
-    bool do_cpu = false;
+    bool do_cpu = true;
 
     auto begin = std::chrono::steady_clock::now();
     Alignments alignments_ref = do_cpu ? aligner_ref.align(targets, queries) : Alignments{};
-    auto alignments = aligner.align(targets, queries);
+    auto alignments = aligner.align(targets, queries, program.get<bool>("skip_traceback"));
     auto end = std::chrono::steady_clock::now();
 
-    auto n_scale = 1;
+    auto n_scale = 5;
 
     auto begin_n_ref = std::chrono::steady_clock::now();
     if (do_cpu) {
@@ -79,7 +83,7 @@ int main(int argc, char *argv[]) {
 
     auto begin_n = std::chrono::steady_clock::now();
     for (int n = 0; n < n_scale; n++) {
-        auto al_tmp = aligner.align(targets, queries);
+        auto al_tmp = aligner.align(targets, queries, program.get<bool>("skip_traceback"));
     }
     auto end_n = std::chrono::steady_clock::now();
 
