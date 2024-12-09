@@ -30,7 +30,8 @@ inline double compare_alignment_accuracy(const Alignments& y_true, const Alignme
             if (ref_query.at(j) == pred_query.at(j)) corrects_query += 1.0;
         }
 
-        tot_accuracy += (corrects_target + corrects_query) / static_cast<double>(std::min(ref_target.size(), pred_target.size()) + std::min(ref_query.size(), pred_query.size()));
+        if (std::min(ref_target.size(), pred_target.size()) + std::min(ref_query.size(), pred_query.size()) > 0)
+            tot_accuracy += (corrects_target + corrects_query) / static_cast<double>(std::min(ref_target.size(), pred_target.size()) + std::min(ref_query.size(), pred_query.size()));
     }
     return tot_accuracy / static_cast<double>(y_true.size());
 }

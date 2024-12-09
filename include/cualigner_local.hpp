@@ -13,9 +13,9 @@
 #include <thrust/device_vector.h>
 #include <cualign_kernels.cuh>
 
-class CudaThreadPooledAligner {
+class CudaThreadPooledAlignerLocal {
 public:
-    CudaThreadPooledAligner(size_t numThreads_, size_t maxM, size_t maxN) : numThreads(numThreads_) {
+    CudaThreadPooledAlignerLocal(size_t numThreads_, size_t maxM, size_t maxN) : numThreads(numThreads_) {
         streams.resize(numThreads);
 
         for (int i = 0; i < numThreads; i++) {
@@ -25,6 +25,8 @@ public:
             char* N_seq_d;
             char* M_seq_d_out;
             char* N_seq_d_out;
+            ScoreType* best_val;
+            int* best_j;
 
             cudaMalloc(&s_matrix_d, (maxM + 1) * (maxN + 1) * sizeof(ScoreType));
             cudaMalloc(&t_matrix_d, (maxM + 1) * (maxN + 1) * sizeof(char));
@@ -32,6 +34,8 @@ public:
             cudaMalloc(&N_seq_d, (maxN + 1) * sizeof(char));
             cudaMalloc(&M_seq_d_out, (maxM + 1 + maxN + 1) * sizeof(char));
             cudaMalloc(&N_seq_d_out, (maxM + 1 + maxN + 1) * sizeof(char));
+            cudaMalloc(&best_val, (maxM + 1) * sizeof(ScoreType));
+            cudaMalloc(&best_j, (maxM + 1) * sizeof(int));
 
             s_matrix_d_s.push_back(s_matrix_d);
             t_matrix_d_s.push_back(t_matrix_d);
@@ -39,6 +43,8 @@ public:
             N_seq_d_s.push_back(N_seq_d);
             M_seq_d_out_s.push_back(M_seq_d_out);
             N_seq_d_out_s.push_back(N_seq_d_out);
+            best_vals_s.push_back(best_val);
+            best_j_s.push_back(best_j);
         }
 
         for (size_t i = 0; i < numThreads; ++i) {
@@ -51,8 +57,10 @@ public:
                 char* N_seq_d = N_seq_d_s[i];
                 char* M_seq_d_out = M_seq_d_out_s[i];
                 char* N_seq_d_out = N_seq_d_out_s[i];
+                ScoreType* best_val = best_vals_s[i];
+                int* best_j = best_j_s[i];
                 while (true) {
-                    std::function<void(cudaStream_t, ScoreType*, char*, char*, char*, char*, char*)> task;
+                    std::function<void(cudaStream_t, ScoreType*, char*, char*, char*, char*, char*, ScoreType*, int*)> task;
                     {
                         std::unique_lock<std::mutex> lock(queueMutex);
                         condition.wait(lock, [this] { return stop || !tasks.empty(); });
@@ -63,14 +71,14 @@ public:
                         task = std::move(tasks.front());
                         tasks.pop();
                     }
-                    task(stream, s_matrix_d, t_matrix_d, M_seq_d, N_seq_d, M_seq_d_out, N_seq_d_out);
+                    task(stream, s_matrix_d, t_matrix_d, M_seq_d, N_seq_d, M_seq_d_out, N_seq_d_out, best_val, best_j);
                     cudaStreamSynchronize(stream);
                 }
             });
         }
     }
 
-    ~CudaThreadPooledAligner() {
+    ~CudaThreadPooledAlignerLocal() {
         {
             std::unique_lock<std::mutex> lock(queueMutex);
             stop = true;
@@ -93,7 +101,7 @@ public:
         }
     }
 
-    void enqueue(std::function<void(cudaStream_t, ScoreType*, char*, char*, char*, char*, char*)> task) {
+    void enqueue(std::function<void(cudaStream_t, ScoreType*, char*, char*, char*, char*, char*, ScoreType*, int*)> task) {
         {
             std::unique_lock<std::mutex> lock(queueMutex);
             tasks.emplace(std::move(task));
@@ -103,7 +111,7 @@ public:
 
     std::vector<std::thread> workers;
     std::vector<cudaStream_t> streams;
-    std::queue<std::function<void(cudaStream_t, ScoreType*, char*, char*, char*, char*, char*)>> tasks;
+    std::queue<std::function<void(cudaStream_t, ScoreType*, char*, char*, char*, char*, char*, ScoreType*, int*)>> tasks;
     std::mutex queueMutex;
     std::condition_variable condition;
     bool stop = false;
@@ -115,20 +123,22 @@ public:
     std::vector<char*> N_seq_d_s;
     std::vector<char*> M_seq_d_out_s;
     std::vector<char*> N_seq_d_out_s;
+    std::vector<ScoreType*> best_vals_s;
+    std::vector<int*> best_j_s;
 };
 
-class CuGlobalAligner {
+class CuLocalAligner {
 public:
     ScoreType _gap_score = 0;
     ScoreType _match_score = 1;
     ScoreType _mismatch_score = -1;
 
-    CuGlobalAligner(ScoreType gap_score, ScoreType match_score, ScoreType mismatch_score) : _gap_score{gap_score}, _match_score{match_score}, _mismatch_score{mismatch_score} {}
+    CuLocalAligner(ScoreType gap_score, ScoreType match_score, ScoreType mismatch_score) : _gap_score{gap_score}, _match_score{match_score}, _mismatch_score{mismatch_score} {}
 
     inline Alignments align(const FastaSeqs& targets, const FastaSeqs& queries, bool skip_traceback) {
         Alignments algns{};
 
-        constexpr int n_workers = 1;  // TODO: tune
+        constexpr int n_workers = 8;  // TODO: tune
 
         if (targets.size() != queries.size()) {
             std::cerr << "Error: Mismatch in targets-queries size" << std::endl;
@@ -143,13 +153,14 @@ public:
             if (maxN < queries.at(i)._seq.size()) maxN = queries.at(i)._seq.size();
         }
 
-        CudaThreadPooledAligner pool {n_workers, maxM, maxN};
+        CudaThreadPooledAlignerLocal pool {n_workers, maxM, maxN};
         algns.resize(targets.size());
 
         for (int i = 0; i < targets.size(); ++i) {
 
             pool.enqueue([i, &targets, &queries, &algns, this, &skip_traceback](cudaStream_t stream, ScoreType* s_matrix_d, char* t_matrix_d,
-                                                               char* M_seq_d, char* N_seq_d, char* M_seq_d_out, char* N_seq_d_out) {
+                                                               char* M_seq_d, char* N_seq_d, char* M_seq_d_out, char* N_seq_d_out,
+                                                                                ScoreType* best_vals, int* best_j) {
                 const auto& M_seq = targets.at(i)._seq;
                 const auto& M_seq_id = targets.at(i)._id;
                 const auto& N_seq = queries.at(i)._seq;
@@ -161,21 +172,24 @@ public:
                 constexpr int blocksize = 32;  // TODO: tune
                 const int nblocks = std::ceil(static_cast<float>(std::max(M + 1, N + 1)) / static_cast<float>(blocksize));
 
-                init_trace_matrices_kern<blocksize, false><<<nblocks, blocksize, 0, stream>>>(M, N, s_matrix_d, t_matrix_d, _gap_score);
+                init_trace_matrices_kern<blocksize, true><<<nblocks, blocksize, 0, stream>>>(M, N, s_matrix_d, t_matrix_d, _gap_score);
 
                 cudaMemcpyAsync(M_seq_d, M_seq.data(), (M + 1) * sizeof(char), cudaMemcpyHostToDevice, stream);
                 cudaMemcpyAsync(N_seq_d, N_seq.data(), (N + 1) * sizeof(char), cudaMemcpyHostToDevice, stream);
 
 
                 for (int j = 0; j < 2 * nblocks + 1; j++) {
-                    base_align_kern<blocksize, false><<<1 + j, blocksize, 0, stream>>>(M, N, M_seq_d, N_seq_d,
+                    base_align_kern<blocksize, true><<<1 + j, blocksize, 0, stream>>>(M, N, M_seq_d, N_seq_d,
                                                                      s_matrix_d, t_matrix_d,
                                                                      _gap_score, _match_score, _mismatch_score, j);
                 }
 
                 if (!skip_traceback) {
-                    traceback_kern<<<1, 1, 0, stream>>>(M, N, M_seq_d, N_seq_d,
+                    find_maximum_entry<blocksize><<<nblocks, blocksize, 0, stream>>>(M, N,
+                                                              s_matrix_d, best_vals, best_j);
+                    traceback_local_kern<<<1, 1, 0, stream>>>(M, N, M_seq_d, N_seq_d,
                                                         s_matrix_d, t_matrix_d,
+                                                        best_vals, best_j,
                                                         M_seq_d_out, N_seq_d_out);
                 }
 

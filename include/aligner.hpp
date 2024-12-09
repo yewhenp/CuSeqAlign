@@ -19,7 +19,7 @@ public:
 
     Aligner(ScoreType gap_score, ScoreType match_score, ScoreType mismatch_score) : _gap_score{gap_score}, _match_score{match_score}, _mismatch_score{mismatch_score} {}
 
-    inline Alignments align(const FastaSeqs& targets, const FastaSeqs& queries) {
+    inline Alignments align(const FastaSeqs& targets, const FastaSeqs& queries, bool skip_traceback = false) {
         Alignments algns{};
 
         if (targets.size() != queries.size()) {

@@ -52,24 +52,25 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    auto aligner_ref = GlobalAligner{static_cast<ScoreType>(program.get<int>("gap_score")),
+    auto aligner_ref = LocalAligner{static_cast<ScoreType>(program.get<int>("gap_score")),
                                      static_cast<ScoreType>(program.get<int>("match_score")),
                                      static_cast<ScoreType>(program.get<int>("mismatch_score"))};
-    auto aligner = CuGlobalAligner{static_cast<ScoreType>(program.get<int>("gap_score")),
+    auto aligner = CuLocalAligner{static_cast<ScoreType>(program.get<int>("gap_score")),
                              static_cast<ScoreType>(program.get<int>("match_score")),
                              static_cast<ScoreType>(program.get<int>("mismatch_score"))};
 
     auto begin_read = std::chrono::steady_clock::now();
     auto targets = FastaSeq::read_fasta_seqs(program.get<std::string>("target"));
     auto queries = FastaSeq::read_fasta_seqs(program.get<std::string>("query"));
-    auto reference = FastaSeq::read_alignments(program.get<std::string>("reference"));
     auto end_read = std::chrono::steady_clock::now();
 
     bool do_cpu = true;
 
     auto begin = std::chrono::steady_clock::now();
     Alignments alignments_ref = do_cpu ? aligner_ref.align(targets, queries) : Alignments{};
+    std::cout << "Ref alignment done" << std::endl;
     auto alignments = aligner.align(targets, queries, program.get<bool>("skip_traceback"));
+    std::cout << "Cuda alignment done" << std::endl;
     auto end = std::chrono::steady_clock::now();
 
     auto n_scale = 5;
@@ -92,11 +93,9 @@ int main(int argc, char *argv[]) {
         std::cout << "(time spent read = " << std::chrono::duration_cast<std::chrono::microseconds>(end_read - begin_read).count() / 1000000.0 << " [seconds]) " <<
                   "(time spent align (n scaled) = " << std::chrono::duration_cast<std::chrono::microseconds>(end_n - begin_n).count() / n_scale / 1000000.0 << " [seconds]) " <<
                   "(time spent align reference (n scaled) = " << std::chrono::duration_cast<std::chrono::microseconds>(end_n_ref - begin_n_ref).count() / n_scale / 1000000.0 << " [seconds]) " <<
-                  " total accuracy gpu = " << compare_alignment_accuracy(reference, alignments) <<
-                  " total accuracy cpu = " << compare_alignment_accuracy(reference, alignments_ref)<< std::endl << std::endl;
+                  " total accuracy gpu = " << compare_alignment_accuracy(alignments_ref, alignments) << std::endl << std::endl;
     } else {
-        std::cout << " total accuracy gpu = " << compare_alignment_accuracy(reference, alignments) <<
-                     " total accuracy cpu = " << compare_alignment_accuracy(reference, alignments_ref)<< std::endl << std::endl;
+        std::cout << " total accuracy gpu = " << compare_alignment_accuracy(alignments_ref, alignments) << std::endl << std::endl;
     }
 
 

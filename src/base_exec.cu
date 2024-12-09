@@ -3,6 +3,7 @@
 #include <aligner.hpp>
 #include <fasta_io.hpp>
 #include <cualigner.hpp>
+#include <cualigner_local.hpp>
 #include <chrono>
 #include <thread>
 #include <random>
@@ -43,7 +44,7 @@ int main() {
 
     {
         auto begin = std::chrono::steady_clock::now();
-        auto aligner = GlobalAligner{gap_score, match_score, mismatch_score};
+        auto aligner = LocalAligner{gap_score, match_score, mismatch_score};
         auto alignments = aligner.align(targets, queries);
         auto end = std::chrono::steady_clock::now();
 
@@ -57,7 +58,7 @@ int main() {
 
     {
         auto begin = std::chrono::steady_clock::now();
-        auto aligner = CuAligner{gap_score, match_score, mismatch_score};
+        auto aligner = CuLocalAligner{gap_score, match_score, mismatch_score};
         auto alignments = aligner.align(targets, queries, false);
         auto end = std::chrono::steady_clock::now();
 
