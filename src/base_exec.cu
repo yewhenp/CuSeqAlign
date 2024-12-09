@@ -27,7 +27,7 @@ std::string generate_random_string(size_t length) {
 int main() {
     cudaSetDevice(0);
 
-    int rand_len = 15000;
+    int rand_len = 30000;
 //    std::string M_seq_str = "TCACGCCTGTAATTCCAAAAAAAAAAAAAAAATCACG";
     std::string M_seq_str = generate_random_string(rand_len);
     FastaSeqs targets = {{M_seq_str}};
@@ -48,7 +48,7 @@ int main() {
         auto alignments = aligner.align(targets, queries);
         auto end = std::chrono::steady_clock::now();
 
-        std::cout << "Host Global alignment " << "(time spent = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() / 1000000.0 << " [seconds]):" << std::endl;
+        std::cout << "Host Local alignment " << "(time spent = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() / 1000000.0 << " [seconds]):" << std::endl;
         for (const auto &alignment: alignments) {
             FastaSeq::print_alignment(alignment);
         }
@@ -62,7 +62,7 @@ int main() {
         auto alignments = aligner.align(targets, queries, false);
         auto end = std::chrono::steady_clock::now();
 
-        std::cout << "GPU Global alignment " << "(time spent = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() / 1000000.0 << " [seconds]):" << std::endl;
+        std::cout << "GPU Local alignment " << "(time spent = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() / 1000000.0 << " [seconds]):" << std::endl;
         for (const auto &alignment: alignments) {
             FastaSeq::print_alignment(alignment);
         }

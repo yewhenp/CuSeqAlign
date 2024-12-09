@@ -138,7 +138,10 @@ public:
     inline Alignments align(const FastaSeqs& targets, const FastaSeqs& queries, bool skip_traceback) {
         Alignments algns{};
 
-        constexpr int n_workers = 8;  // TODO: tune
+        int n_workers = 8;  // TODO: tune
+        if (n_workers > targets.size()) {
+            n_workers = targets.size();
+        }
 
         if (targets.size() != queries.size()) {
             std::cerr << "Error: Mismatch in targets-queries size" << std::endl;
