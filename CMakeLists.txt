@@ -54,6 +54,9 @@ endfunction()
 set(OUT_ALIGNER_BASE_SOURCES src/base_exec.cu)
 set_target_and_link(OutAligner ${OUT_ALIGNER_BASE_SOURCES})
 
+set(OUT_ALIGNER_BASE_SOURCES_LOCAL src/base_exec_local.cu)
+set_target_and_link(OutAlignerLocal ${OUT_ALIGNER_BASE_SOURCES_LOCAL})
+
 
 set(OUT_ALIGNER_VALIDATION_SOURCES src/validation.cu)
 set_target_and_link(OutAlignerValidate ${OUT_ALIGNER_VALIDATION_SOURCES})

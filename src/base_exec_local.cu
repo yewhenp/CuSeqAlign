@@ -66,11 +66,11 @@ int main(int argc, char *argv[]) {
 
     {
         auto begin = std::chrono::steady_clock::now();
-        auto aligner = GlobalAligner{gap_score, match_score, mismatch_score};
+        auto aligner = LocalAligner{gap_score, match_score, mismatch_score};
         auto alignments = aligner.align(targets, queries);
         auto end = std::chrono::steady_clock::now();
 
-        std::cout << "Host Global alignment " << "(time spent = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() / 1000000.0 << " [seconds]):" << std::endl;
+        std::cout << "Host Local alignment " << "(time spent = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() / 1000000.0 << " [seconds]):" << std::endl;
         for (const auto &alignment: alignments) {
             FastaSeq::print_alignment(alignment);
         }
@@ -80,11 +80,11 @@ int main(int argc, char *argv[]) {
 
     {
         auto begin = std::chrono::steady_clock::now();
-        auto aligner = CuGlobalAligner{gap_score, match_score, mismatch_score};
+        auto aligner = CuLocalAligner{gap_score, match_score, mismatch_score};
         auto alignments = aligner.align(targets, queries, false);
         auto end = std::chrono::steady_clock::now();
 
-        std::cout << "GPU Global alignment " << "(time spent = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() / 1000000.0 << " [seconds]):" << std::endl;
+        std::cout << "GPU Local alignment " << "(time spent = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() / 1000000.0 << " [seconds]):" << std::endl;
         for (const auto &alignment: alignments) {
             FastaSeq::print_alignment(alignment);
         }
