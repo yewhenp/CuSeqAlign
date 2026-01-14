@@ -10,7 +10,7 @@ inline double compare_alignment_accuracy(const Alignments& y_true, const Alignme
 
     double tot_accuracy = 0.0;
 
-    for (int i = 0; i < y_true.size(); ++i) {
+    for (size_t i = 0; i < y_true.size(); ++i) {
         const auto& ref_alignment = y_true.at(i);
         const auto& pred_alignment = y_pred.at(i);
 
@@ -21,12 +21,12 @@ inline double compare_alignment_accuracy(const Alignments& y_true, const Alignme
         const auto& pred_query = pred_alignment.second._seq;
 
         double corrects_target = 0.0;
-        for (int j = 0; j < std::min(ref_target.size(), pred_target.size()); ++j) {
+        for (size_t j = 0; j < std::min(ref_target.size(), pred_target.size()); ++j) {
             if (ref_target.at(j) == pred_target.at(j)) corrects_target += 1.0;
         }
 
         double corrects_query = 0.0;
-        for (int j = 0; j < std::min(ref_query.size(), pred_query.size()); ++j) {
+        for (size_t j = 0; j < std::min(ref_query.size(), pred_query.size()); ++j) {
             if (ref_query.at(j) == pred_query.at(j)) corrects_query += 1.0;
         }
 

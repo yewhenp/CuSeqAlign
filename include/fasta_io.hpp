@@ -61,7 +61,7 @@ public:
 
         FastaSeq temp_1, temp_2;
 
-        for (int i = 0; i < all_aligns.size(); ++i) {
+        for (size_t i = 0; i < all_aligns.size(); ++i) {
             if (i % 2 == 1) {
                 temp_2 = all_aligns.at(i);
                 algns.emplace_back(temp_1, temp_2);

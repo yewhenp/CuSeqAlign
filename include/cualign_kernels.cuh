@@ -15,28 +15,39 @@ __global__ __launch_bounds__(NThreads) void base_align_kern(size_t M, size_t N,
     auto x_pos_thrd = static_cast<int>(threadIdx.x);
     auto y_pos_thrd = -static_cast<int>(threadIdx.x);
 
-    auto x_pos = blockIdx.x * NThreads + x_pos_thrd;
-    auto y_pos = step * NThreads - blockIdx.x * NThreads + y_pos_thrd;
+    int XBlockOffset = blockIdx.x * NThreads;
+    int StepOffset = step * NThreads;
 
-    if (step * NThreads - blockIdx.x * NThreads + 2 * NThreads < 0) return;
+    int x_pos = XBlockOffset + x_pos_thrd;
+    int y_pos = StepOffset - XBlockOffset + y_pos_thrd;
+
+    if (StepOffset - XBlockOffset + 2 * NThreads < 0) {
+        return;
+    }
 
     auto s_matrix = make_tensor(make_gmem_ptr(s_matrix_ptr), make_layout(make_shape(M + 1, N + 1), make_shape(1, M + 1)));
     auto t_matrix = make_tensor(make_gmem_ptr(t_matrix_ptr), make_layout(make_shape(M + 1, N + 1), make_shape(1, M + 1)));
 
     auto shmem_matrix = make_tensor(make_smem_ptr(shmem), make_layout(make_shape(NThreads + 1, NThreads + 1), make_shape(1, NThreads + 1)));
 
-    if (x_pos <= M && step * NThreads - blockIdx.x * NThreads >= 0 && step * NThreads - blockIdx.x * NThreads <= N)
-        shmem_matrix(threadIdx.x, 0) = s_matrix(x_pos, step * NThreads - blockIdx.x * NThreads);
+    int ColLoadOffset = StepOffset - XBlockOffset;
+    if (x_pos <= M && ColLoadOffset >= 0 && ColLoadOffset <= N) {
+        shmem_matrix(threadIdx.x, 0) = s_matrix(x_pos, ColLoadOffset);
+    }
 
-    if (step * NThreads - blockIdx.x * NThreads + threadIdx.x >= 0 && step * NThreads - blockIdx.x * NThreads + threadIdx.x <= N)
-        shmem_matrix(0, threadIdx.x) = s_matrix(blockIdx.x * NThreads, step * NThreads - blockIdx.x * NThreads + threadIdx.x);
+    int RowLoadOffset = StepOffset - XBlockOffset + threadIdx.x;
+    if (RowLoadOffset >= 0 && RowLoadOffset <= N) {
+        shmem_matrix(0, threadIdx.x) = s_matrix(XBlockOffset, RowLoadOffset);
+    }
 
     if (threadIdx.x == 0) {
-        if (blockIdx.x * NThreads + NThreads <= M && step * NThreads - blockIdx.x * NThreads >= 0 && step * NThreads - blockIdx.x * NThreads <= N)
-            shmem_matrix(NThreads, 0) = s_matrix(blockIdx.x * NThreads + NThreads, step * NThreads - blockIdx.x * NThreads);
+        if (XBlockOffset + NThreads <= M && StepOffset - XBlockOffset >= 0 && StepOffset - XBlockOffset <= N) {
+            shmem_matrix(NThreads, 0) = s_matrix(XBlockOffset + NThreads, StepOffset - XBlockOffset);
+        }
 
-        if (step * NThreads - blockIdx.x * NThreads + NThreads >= 0 && step * NThreads - blockIdx.x * NThreads + NThreads <= N)
-            shmem_matrix(0, NThreads) = s_matrix(blockIdx.x * NThreads, step * NThreads - blockIdx.x * NThreads + NThreads);
+        if (StepOffset - XBlockOffset + NThreads >= 0 && StepOffset - XBlockOffset + NThreads <= N) {
+            shmem_matrix(0, NThreads) = s_matrix(XBlockOffset, StepOffset - XBlockOffset + NThreads);
+        }
     }
 
     if (x_pos >= M) return;
@@ -48,7 +59,7 @@ __global__ __launch_bounds__(NThreads) void base_align_kern(size_t M, size_t N,
         __syncthreads();
 
         if (0 <= y_pos_thrd && y_pos_thrd < NThreads) {
-            y_pos = step * NThreads - blockIdx.x * NThreads + y_pos_thrd;
+            y_pos = StepOffset - XBlockOffset + y_pos_thrd;
 
             if (y_pos >= N) {
                 return;

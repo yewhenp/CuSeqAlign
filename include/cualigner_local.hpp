@@ -15,10 +15,10 @@
 
 class CudaThreadPooledAlignerLocal {
 public:
-    CudaThreadPooledAlignerLocal(size_t numThreads_, size_t maxM, size_t maxN) : numThreads(numThreads_) {
+    CudaThreadPooledAlignerLocal(size_t numThreads_, unsigned long maxM, unsigned long maxN) : numThreads(numThreads_) {
         streams.resize(numThreads);
 
-        for (int i = 0; i < numThreads; i++) {
+        for (size_t i = 0; i < numThreads; i++) {
             ScoreType* s_matrix_d;
             char* t_matrix_d;
             char* M_seq_d;
@@ -91,7 +91,7 @@ public:
             cudaStreamDestroy(stream);
         }
 
-        for (int i = 0; i < numThreads; i++) {
+        for (size_t i = 0; i < numThreads; i++) {
             cudaFree(s_matrix_d_s[i]);
             cudaFree(t_matrix_d_s[i]);
             cudaFree(M_seq_d_s[i]);
@@ -138,7 +138,7 @@ public:
     inline Alignments align(const FastaSeqs& targets, const FastaSeqs& queries, bool skip_traceback) {
         Alignments algns{};
 
-        int n_workers = 8;  // TODO: tune
+        unsigned long n_workers = 8;  // TODO: tune
         if (n_workers > targets.size()) {
             n_workers = targets.size();
         }
@@ -151,7 +151,7 @@ public:
         size_t maxM = 0;
         size_t maxN = 0;
 
-        for (int i = 0; i < targets.size(); ++i) {
+        for (size_t i = 0; i < targets.size(); ++i) {
             if (maxM < targets.at(i)._seq.size()) maxM = targets.at(i)._seq.size();
             if (maxN < queries.at(i)._seq.size()) maxN = queries.at(i)._seq.size();
         }
@@ -159,7 +159,7 @@ public:
         CudaThreadPooledAlignerLocal pool {n_workers, maxM, maxN};
         algns.resize(targets.size());
 
-        for (int i = 0; i < targets.size(); ++i) {
+        for (size_t i = 0; i < targets.size(); ++i) {
 
             pool.enqueue([i, &targets, &queries, &algns, this, &skip_traceback](cudaStream_t stream, ScoreType* s_matrix_d, char* t_matrix_d,
                                                                char* M_seq_d, char* N_seq_d, char* M_seq_d_out, char* N_seq_d_out,

@@ -67,10 +67,8 @@ int main(int argc, char *argv[]) {
 
     bool do_cpu = true;
 
-    auto begin = std::chrono::steady_clock::now();
     Alignments alignments_ref = do_cpu ? aligner_ref.align(targets, queries) : Alignments{};
     auto alignments = aligner.align(targets, queries, program.get<bool>("skip_traceback"));
-    auto end = std::chrono::steady_clock::now();
 
     auto n_scale = 5;
 

@@ -10,7 +10,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
 set(CMAKE_CUDA_ARCHITECTURES 80)
 
 find_package (OpenMP REQUIRED)
-find_package (Eigen3 3.3 REQUIRED NO_MODULE)
+find_package (Eigen3 REQUIRED NO_MODULE)
 #find_package (indicators REQUIRED)
 #find_package (MPI REQUIRED)
 #find_package (FMT REQUIRED)
@@ -47,6 +47,7 @@ function(set_target_and_link TARGET_NAME TARGET_SOURCES)
     target_compile_options(${TARGET_NAME} PRIVATE
             $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-Wall>
             $<$<COMPILE_LANGUAGE:CUDA>:-DCUTLASS_NVCC_ARCHS=80>
+            $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
     )
 endfunction()
 

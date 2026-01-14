@@ -27,7 +27,7 @@ public:
             return algns;
         }
 
-        for (int i = 0; i < targets.size(); ++i) {
+        for (size_t i = 0; i < targets.size(); ++i) {
             const auto& M_seq = targets.at(i)._seq;
             const auto& M_seq_id = targets.at(i)._id;
             const auto& N_seq = queries.at(i)._seq;

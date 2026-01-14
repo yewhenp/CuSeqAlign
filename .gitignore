@@ -3,3 +3,5 @@ cmake-build-*
 bin
 build
 data
+include/cute/
+*.fasta
